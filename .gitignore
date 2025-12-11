@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Cursor IDE rules (local development file)
+.cursorrules
+
+# Security: Never commit credentials
+*credentials*
+*secrets*
+*password*
+*database-url*
+*connection-string*
+
