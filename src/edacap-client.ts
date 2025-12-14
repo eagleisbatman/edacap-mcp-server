@@ -54,20 +54,34 @@ export interface WeatherStation {
 }
 
 /**
- * Climate forecast data
+ * Climate forecast response from API
  */
-export interface ClimateForecast {
+export interface ClimateForecastResponse {
+  forecast: string;
+  confidence: number;
+  climate: ClimateForecastData[];
+  scenario: any[];
+}
+
+/**
+ * Climate data for a weather station
+ */
+export interface ClimateForecastData {
   weather_station: string;
-  year: number;
-  month: number;
-  data: Array<{
-    measure: string;
+  performance?: Array<{
+    year: number;
+    month: number;
+    name: string;
     value: number;
-    lower?: number;
-    upper?: number;
-    performance?: Array<{
-      year: number;
-      value: number;
+  }>;
+  data: Array<{
+    year: number;
+    month: number;
+    probabilities: Array<{
+      measure: string;
+      lower?: number;
+      normal?: number;
+      upper?: number;
     }>;
   }>;
 }
@@ -182,8 +196,8 @@ export class EDACaPClient {
    *
    * @param weatherStationIds - Comma-separated weather station IDs
    */
-  async getClimateForecast(weatherStationIds: string): Promise<ClimateForecast[]> {
-    return this.request<ClimateForecast[]>(`/api/Forecast/Climate/${weatherStationIds}/true/json`);
+  async getClimateForecast(weatherStationIds: string): Promise<ClimateForecastResponse> {
+    return this.request<ClimateForecastResponse>(`/api/Forecast/Climate/${weatherStationIds}/true/json`);
   }
 
   /**

@@ -177,22 +177,47 @@ app.post('/mcp', async (req, res) => {
             };
           }
 
-          const forecasts = await edacapClient.getClimateForecast(stationId);
+          const response = await edacapClient.getClimateForecast(stationId);
+
+          // Handle case where climate array is empty or missing
+          if (!response.climate || response.climate.length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  station_id: stationId,
+                  message: 'No climate forecast data available for this station at this time.',
+                  forecast_id: response.forecast,
+                  confidence: response.confidence
+                }, null, 2)
+              }]
+            };
+          }
+
+          // Process climate data from the response
+          const climateData = response.climate.map(c => ({
+            weather_station: c.weather_station,
+            forecasts: c.data.map(d => ({
+              year: d.year,
+              month: d.month,
+              probabilities: d.probabilities.map(p => ({
+                measure: p.measure,
+                below_normal: p.lower,
+                normal: p.normal,
+                above_normal: p.upper
+              }))
+            })),
+            performance: c.performance
+          }));
 
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
                 station_id: stationId,
-                forecasts: forecasts.map(f => ({
-                  year: f.year,
-                  month: f.month,
-                  predictions: f.data.map(d => ({
-                    measure: d.measure,
-                    value: d.value,
-                    range: d.lower && d.upper ? { lower: d.lower, upper: d.upper } : undefined
-                  }))
-                }))
+                forecast_id: response.forecast,
+                confidence: response.confidence,
+                climate_forecasts: climateData
               }, null, 2)
             }]
           };
