@@ -9,46 +9,135 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
       * { box-sizing: border-box; }
-      body { margin: 0; padding: 0; background-color: #09090b; color: #fafafa; }
+      
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #09090b;
+        color: #fafafa;
+      }
+      
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: #09090b; }
       ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
       ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
       *, *::before, *::after { border-color: #27272a !important; }
-      [data-section-id] { border: none !important; border-bottom: 1px solid #18181b !important; }
+      
+      .redoc-wrap, [class*="redoc"], [class*="api-content"], [class*="middle-panel"], [class*="right-panel"], div[role="main"], main {
+        background-color: #09090b !important;
+      }
+
+      table, table tbody, table thead, table tr, table td, table th,
+      [class*="table"], [class*="Table"], [class*="schema"], [class*="Schema"],
+      [class*="property"], [class*="Property"], [class*="field"], [class*="Field"],
+      [class*="param"], [class*="Param"], [class*="row"], [class*="Row"] {
+        background-color: #09090b !important;
+        background: #09090b !important;
+      }
+      
+      table tr:nth-child(even), [class*="row"]:nth-child(even) {
+        background-color: #0c0c0e !important;
+      }
+      
+      [class*="properties"], [class*="Properties"], [class*="parameters"], [class*="Parameters"],
+      [class*="request-body"], [class*="RequestBody"], [class*="response-body"], [class*="ResponseBody"] {
+        background-color: #09090b !important;
+        background: #09090b !important;
+      }
+      
+      [class*="nested"], [class*="Nested"], [class*="children"], [class*="inner"] {
+        background-color: #09090b !important;
+      }
+
+      [data-section-id] {
+        border: none !important;
+        border-bottom: 1px solid #18181b !important;
+        background-color: #09090b !important;
+      }
+      
       h2[id], h3[id] { border-bottom: 1px solid #18181b !important; }
       hr { border: none !important; border-top: 1px solid #18181b !important; margin: 16px 0 !important; }
-      button[role="tab"], [class*="tab"], [class*="Tab"] { background-color: #18181b !important; color: #a1a1aa !important; border: 1px solid #27272a !important; border-radius: 6px !important; }
-      button[role="tab"]:hover, [class*="tab"]:hover { background-color: #27272a !important; color: #fafafa !important; }
-      button[role="tab"][aria-selected="true"], [class*="tab"][aria-selected="true"], [class*="active"] { background-color: #27272a !important; color: #fafafa !important; }
-      [class*="responses"] [class*="200"], [class*="response-code"][class*="success"], span[class*="code"][class*="2"] { background-color: #22c55e !important; color: #052e16 !important; font-weight: 600 !important; padding: 2px 8px !important; border-radius: 4px !important; }
-      [class*="responses"] [class*="4"], [class*="responses"] [class*="5"], [class*="response-code"][class*="error"] { background-color: #ef4444 !important; color: #fafafa !important; font-weight: 600 !important; padding: 2px 8px !important; border-radius: 4px !important; }
-      [class*="http-verb"], [class*="operation-type"] { font-weight: 600 !important; padding: 4px 10px !important; border-radius: 4px !important; text-transform: uppercase !important; font-size: 11px !important; letter-spacing: 0.5px !important; }
+
+      button[role="tab"], [class*="tab"], [class*="Tab"] {
+        background-color: #18181b !important;
+        color: #a1a1aa !important;
+        border: 1px solid #27272a !important;
+        border-radius: 6px !important;
+      }
+      
+      button[role="tab"]:hover, [class*="tab"]:hover {
+        background-color: #27272a !important;
+        color: #fafafa !important;
+      }
+      
+      button[role="tab"][aria-selected="true"], [class*="tab"][aria-selected="true"], [class*="active"] {
+        background-color: #27272a !important;
+        color: #fafafa !important;
+      }
+
+      [class*="responses"] [class*="200"], [class*="response-code"][class*="success"], span[class*="code"][class*="2"] {
+        background-color: #22c55e !important;
+        color: #052e16 !important;
+        font-weight: 600 !important;
+        padding: 2px 8px !important;
+        border-radius: 4px !important;
+      }
+      
+      [class*="responses"] [class*="4"], [class*="responses"] [class*="5"], [class*="response-code"][class*="error"] {
+        background-color: #ef4444 !important;
+        color: #fafafa !important;
+        font-weight: 600 !important;
+        padding: 2px 8px !important;
+        border-radius: 4px !important;
+      }
+
+      [class*="http-verb"], [class*="operation-type"] {
+        font-weight: 600 !important;
+        padding: 4px 10px !important;
+        border-radius: 4px !important;
+        text-transform: uppercase !important;
+        font-size: 11px !important;
+        letter-spacing: 0.5px !important;
+      }
+      
       [class*="get"] { background-color: rgba(34, 197, 94, 0.15) !important; color: #22c55e !important; }
       [class*="post"] { background-color: rgba(59, 130, 246, 0.15) !important; color: #3b82f6 !important; }
       [class*="put"] { background-color: rgba(249, 115, 22, 0.15) !important; color: #f97316 !important; }
       [class*="delete"] { background-color: rgba(239, 68, 68, 0.15) !important; color: #ef4444 !important; }
       [class*="patch"] { background-color: rgba(168, 85, 247, 0.15) !important; color: #a855f7 !important; }
+
       table, tr, td, th { border-color: #27272a !important; }
       tr { border-bottom: 1px solid #18181b !important; }
       [class*="property-name"] { color: #fafafa !important; }
       [class*="type"] { color: #a1a1aa !important; background-color: #18181b !important; padding: 2px 6px !important; border-radius: 4px !important; font-size: 11px !important; }
       [class*="required"] { color: #ef4444 !important; font-size: 10px !important; text-transform: uppercase !important; }
+
       pre, code { background-color: #18181b !important; border: 1px solid #27272a !important; border-radius: 6px !important; }
       [class*="right-panel"] pre, [class*="rightPanel"] pre { background-color: #0f0f0f !important; border: 1px solid #1f1f23 !important; }
+
       [class*="sidebar"], [class*="menu-content"] { background-color: #09090b !important; border-right: 1px solid #18181b !important; }
       [class*="sidebar"] a, [class*="menu-content"] a { color: #71717a !important; border: none !important; }
       [class*="sidebar"] a:hover, [class*="sidebar"] a.active, [class*="menu-content"] a:hover { color: #fafafa !important; background-color: #18181b !important; }
+
       input[type="search"], [class*="search-input"] { background-color: #18181b !important; border: 1px solid #27272a !important; color: #fafafa !important; border-radius: 6px !important; }
       input::placeholder { color: #52525b !important; }
+
       [class*="arrow"], [class*="expand"] svg { fill: #52525b !important; color: #52525b !important; }
+
       h1, h2, h3, h4, h5 { color: #fafafa !important; border-bottom: none !important; }
       h1 { border-bottom: 1px solid #18181b !important; padding-bottom: 12px !important; }
+
       a { color: #a1a1aa !important; text-decoration: none !important; }
       a:hover { color: #fafafa !important; }
+
       [class*="right-panel"], [class*="rightPanel"] { background-color: #09090b !important; border-left: 1px solid #18181b !important; }
+
       p, li, td { color: #a1a1aa !important; }
       strong, b { color: #fafafa !important; }
+      
+      div, section, article, aside, header, footer, nav, span, ul, ol { background-color: transparent !important; }
+      .redoc-wrap > div, [class*="api-info"], [class*="api-content"], [class*="content"] > div { background-color: #09090b !important; }
     </style>
   </head>
   <body>
@@ -75,7 +164,8 @@
             http: { get: '#22c55e', post: '#3b82f6', put: '#f97316', patch: '#a855f7', delete: '#ef4444' }
           },
           sidebar: { backgroundColor: '#09090b', textColor: '#71717a', activeTextColor: '#fafafa' },
-          rightPanel: { backgroundColor: '#09090b', textColor: '#a1a1aa' }
+          rightPanel: { backgroundColor: '#09090b', textColor: '#a1a1aa' },
+          schema: { nestedBackground: '#09090b', typeNameColor: '#a1a1aa', typeTitleColor: '#fafafa' }
         }
       }, document.getElementById('redoc-container'));
     </script>
