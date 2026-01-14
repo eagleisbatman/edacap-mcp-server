@@ -1,0 +1,359 @@
+openapi: 3.0.3
+info:
+  title: EDACaP MCP Server
+  version: 1.0.0
+  description: |
+    Climate forecasts and agricultural advisory for Ethiopian farmers via Aclimate/EDACaP.
+    
+    This MCP server provides seasonal climate forecasts and crop yield predictions
+    specifically for Ethiopia through the CCAFS Climate (Aclimate) API.
+    
+    ## MCP Protocol
+    
+    This server implements the Model Context Protocol (MCP) using JSON-RPC 2.0 over HTTP.
+    All tool calls are made via `POST /mcp` with JSON-RPC requests.
+    
+    ## Available Tools
+    
+    | Tool | Description |
+    |------|-------------|
+    | `get_weather_stations` | List weather stations in Ethiopia |
+    | `get_climate_forecast` | Get seasonal climate forecast |
+    | `get_crop_forecast` | Get crop yield predictions |
+    
+    ## Coverage
+    
+    This service is available only for locations in Ethiopia.
+    
+    ## External Documentation
+    
+    [Aclimate API Documentation](https://docs.aclimate.org/en/latest/)
+
+servers:
+  - url: https://edacap-mcp-server.up.railway.app
+    description: Production
+  - url: http://localhost:3002
+    description: Local Development
+
+tags:
+  - name: Health
+    description: Service health and status
+  - name: MCP
+    description: Model Context Protocol endpoints
+
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Service Information
+      description: Returns service metadata and available tools
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: EDACaP Climate Advisory MCP Server
+                  version:
+                    type: string
+                  description:
+                    type: string
+                  endpoints:
+                    type: object
+                  tools:
+                    type: array
+                    items:
+                      type: string
+                  supportedRegion:
+                    type: string
+                    example: Ethiopia
+                  apiDocumentation:
+                    type: string
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health Check
+      description: Returns server health status
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /mcp:
+    post:
+      tags: [MCP]
+      summary: MCP JSON-RPC Endpoint
+      description: |
+        Main entry point for Model Context Protocol tool calls.
+        
+        ## get_weather_stations
+        
+        Get list of weather stations in Ethiopia.
+        
+        **Parameters:** None
+        
+        ## get_climate_forecast
+        
+        Get seasonal climate forecast for a location.
+        
+        **Parameters:**
+        - `latitude` (number, optional): Latitude coordinate
+        - `longitude` (number, optional): Longitude coordinate
+        - `station_id` (string, optional): Weather station ID (alternative to coordinates)
+        
+        ## get_crop_forecast
+        
+        Get crop yield forecast for a location.
+        
+        **Parameters:**
+        - `latitude` (number, optional): Latitude coordinate
+        - `longitude` (number, optional): Longitude coordinate
+        - `station_id` (string, optional): Weather station ID (alternative to coordinates)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPRequest'
+            examples:
+              get_stations:
+                summary: List weather stations
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: tools/call
+                  params:
+                    name: get_weather_stations
+                    arguments: {}
+              get_climate:
+                summary: Get climate forecast
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: tools/call
+                  params:
+                    name: get_climate_forecast
+                    arguments:
+                      latitude: 9.03
+                      longitude: 38.74
+              get_crop:
+                summary: Get crop forecast
+                value:
+                  jsonrpc: "2.0"
+                  id: 3
+                  method: tools/call
+                  params:
+                    name: get_crop_forecast
+                    arguments:
+                      station_id: "61b78cb24a"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONRPCError'
+              example:
+                jsonrpc: "2.0"
+                error:
+                  code: -32602
+                  message: Invalid params
+                  data: "Please provide coordinates or a station ID"
+                id: 1
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONRPCError'
+              examples:
+                region_unavailable:
+                  summary: Region not available
+                  value:
+                    jsonrpc: "2.0"
+                    error:
+                      code: -32603
+                      message: Internal server error
+                      data: "Ethiopia is not available in the EDACaP system at this time."
+                    id: 1
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: edacap-mcp-server
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        supportedRegion:
+          type: string
+          example: Ethiopia
+        apiDocumentation:
+          type: string
+
+    MCPRequest:
+      type: object
+      required: [jsonrpc, method]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+        method:
+          type: string
+          enum: [tools/list, tools/call]
+        params:
+          type: object
+
+    JSONRPCError:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              type: string
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+            - type: "null"
+
+    WeatherStationsResponse:
+      type: object
+      properties:
+        country:
+          type: string
+          example: Ethiopia
+        total_stations:
+          type: integer
+        stations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              latitude:
+                type: number
+              longitude:
+                type: number
+              municipality:
+                type: string
+              state:
+                type: string
+
+    ClimateForecastResponse:
+      type: object
+      properties:
+        station_id:
+          type: string
+        forecast_id:
+          type: string
+        confidence:
+          type: number
+        climate_forecasts:
+          type: array
+          items:
+            type: object
+            properties:
+              weather_station:
+                type: string
+              forecasts:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    year:
+                      type: integer
+                    month:
+                      type: integer
+                    probabilities:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          measure:
+                            type: string
+                          below_normal:
+                            type: number
+                          normal:
+                            type: number
+                          above_normal:
+                            type: number
+              performance:
+                type: object
+
+    CropForecastResponse:
+      type: object
+      properties:
+        station_id:
+          type: string
+        crop_forecasts:
+          type: array
+          items:
+            type: object
+            properties:
+              cultivar:
+                type: string
+              soil:
+                type: string
+              predictions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    measure:
+                      type: string
+                    median:
+                      type: number
+                    average:
+                      type: number
+                    range:
+                      type: object
+                      properties:
+                        min:
+                          type: number
+                        max:
+                          type: number
+                    confidence:
+                      type: object
+                      properties:
+                        lower:
+                          type: number
+                        upper:
+                          type: number

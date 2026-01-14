@@ -1,10 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { EDACaPClient } from './edacap-client.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -15,6 +20,10 @@ app.use(cors({
   exposedHeaders: ['Mcp-Session-Id'],
   allowedHeaders: ['Content-Type', 'mcp-session-id', 'Authorization', 'X-Farm-Latitude', 'X-Farm-Longitude']
 }));
+
+// Serve API documentation
+app.use('/docs', express.static(path.join(__dirname, '../docs')));
+app.use('/docs', express.static(path.join(__dirname, '../../docs')));
 
 // Environment variables
 const PORT = process.env.PORT || 3002;
