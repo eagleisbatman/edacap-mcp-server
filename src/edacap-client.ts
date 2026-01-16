@@ -236,9 +236,93 @@ export class EDACaPClient {
   }
 
   /**
-   * Find nearest weather station to given coordinates
+   * Find nearest weather stations to given coordinates (returns multiple for fallback)
+   * @param count - Number of nearest stations to return (default 5)
+   */
+  async findNearestStations(
+    lat: number,
+    lon: number,
+    countryId: string,
+    count: number = 5
+  ): Promise<Array<{ station: WeatherStation; distance: number }>> {
+    const stations = await this.getWeatherStations(countryId);
+
+    if (!stations || stations.length === 0) {
+      return [];
+    }
+
+    // Calculate distance using Haversine formula
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const haversine = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371; // km
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    // Calculate distances for all stations
+    const stationsWithDistance = stations
+      .filter(s => s.latitude && s.longitude)
+      .map(station => ({
+        station,
+        distance: haversine(lat, lon, station.latitude, station.longitude)
+      }))
+      .sort((a, b) => a.distance - b.distance);
+
+    return stationsWithDistance.slice(0, count);
+  }
+
+  /**
+   * Find nearest weather station to given coordinates (legacy method)
    */
   async findNearestStation(
+    lat: number,
+    lon: number,
+    countryId: string
+  ): Promise<WeatherStation | null> {
+    const nearest = await this.findNearestStations(lat, lon, countryId, 1);
+    return nearest.length > 0 ? nearest[0].station : null;
+  }
+
+  /**
+   * Find a station with active forecast data by trying multiple nearby stations
+   * @returns The first station with data, or null if none found
+   */
+  async findActiveStation(
+    lat: number,
+    lon: number,
+    countryId: string,
+    maxAttempts: number = 3
+  ): Promise<{ station: WeatherStation; forecast: ClimateForecastResponse } | null> {
+    const nearestStations = await this.findNearestStations(lat, lon, countryId, maxAttempts);
+    
+    for (const { station, distance } of nearestStations) {
+      try {
+        console.log(`[EDACaP] Trying station ${station.name} (${distance.toFixed(1)}km away)...`);
+        const forecast = await this.getClimateForecast(station.id);
+        
+        // Check if this station has actual climate data
+        if (forecast.climate && forecast.climate.length > 0) {
+          console.log(`[EDACaP] ✅ Found active station: ${station.name} with ${forecast.climate.length} climate records`);
+          return { station, forecast };
+        } else {
+          console.log(`[EDACaP] ⚠️ Station ${station.name} has no climate data, trying next...`);
+        }
+      } catch (error) {
+        console.log(`[EDACaP] ⚠️ Error fetching forecast for ${station.name}: ${(error as Error).message}`);
+      }
+    }
+    
+    console.log(`[EDACaP] ❌ No active stations found within ${maxAttempts} attempts`);
+    return null;
+  }
+
+  // Legacy compatibility - keep the old loop structure but deprecated
+  private async findNearestStationLegacy(
     lat: number,
     lon: number,
     countryId: string
@@ -249,10 +333,9 @@ export class EDACaPClient {
       return null;
     }
 
-    // Calculate distance using Haversine formula
     const toRad = (deg: number) => (deg * Math.PI) / 180;
     const haversine = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-      const R = 6371; // km
+      const R = 6371;
       const dLat = toRad(lat2 - lat1);
       const dLon = toRad(lon2 - lon1);
       const a =

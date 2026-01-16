@@ -166,17 +166,36 @@ app.post('/mcp', async (req, res) => {
           }
 
           let stationId = station_id;
+          let response;
 
-          // If no station ID, find nearest station to coordinates
-          if (!stationId && lat !== undefined && lon !== undefined) {
-            const nearestStation = await edacapClient.findNearestStation(lat, lon, cachedEthiopiaId);
-            if (nearestStation) {
-              stationId = nearestStation.id;
-              console.log(`[MCP Tool] Using nearest station: ${nearestStation.name} (${stationId})`);
-            }
+          // If station ID provided, use it directly
+          if (stationId) {
+            console.log(`[MCP Tool] Using provided station ID: ${stationId}`);
+            response = await edacapClient.getClimateForecast(stationId);
           }
-
-          if (!stationId) {
+          // Otherwise, find an active station near the coordinates
+          else if (lat !== undefined && lon !== undefined) {
+            // Try to find a station with actual data (tries up to 3 nearby stations)
+            const activeResult = await edacapClient.findActiveStation(lat, lon, cachedEthiopiaId, 3);
+            
+            if (activeResult) {
+              stationId = activeResult.station.id;
+              response = activeResult.forecast;
+              console.log(`[MCP Tool] Found active station: ${activeResult.station.name} (${stationId})`);
+            } else {
+              // No active station found - return helpful message
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    message: 'No seasonal climate forecast data is currently available for your location. The EDACaP system does not have active weather stations with forecast data near your coordinates. For current weather, please use Tomorrow.io or AccuWeather instead.',
+                    coordinates: { latitude: lat, longitude: lon },
+                    suggestion: 'Try asking for current weather or weekly forecast instead'
+                  }, null, 2)
+                }]
+              };
+            }
+          } else {
             return {
               content: [{
                 type: 'text',
@@ -186,18 +205,16 @@ app.post('/mcp', async (req, res) => {
             };
           }
 
-          const response = await edacapClient.getClimateForecast(stationId);
-
-          // Handle case where climate array is empty or missing
-          if (!response.climate || response.climate.length === 0) {
+          // Handle case where climate array is empty or missing (shouldn't happen with findActiveStation, but just in case)
+          if (!response || !response.climate || response.climate.length === 0) {
             return {
               content: [{
                 type: 'text',
                 text: JSON.stringify({
                   station_id: stationId,
                   message: 'No climate forecast data available for this station at this time.',
-                  forecast_id: response.forecast,
-                  confidence: response.confidence
+                  forecast_id: response?.forecast,
+                  confidence: response?.confidence
                 }, null, 2)
               }]
             };
