@@ -18,7 +18,12 @@
 
 import fetch from 'node-fetch';
 
-const TIMEOUT_MS = 30000;
+// Reduced from 30s to 10s for faster response
+const TIMEOUT_MS = 10000;
+
+// Cache for weather stations (they rarely change)
+let stationsCache: { stations: WeatherStation[]; fetchedAt: number } | null = null;
+const STATIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 /**
  * Country information from Aclimate API
@@ -183,12 +188,24 @@ export class EDACaPClient {
   }
 
   /**
-   * Get weather stations for a country
+   * Get weather stations for a country (with caching)
    *
    * @param countryId - Country ID from getCountries()
    */
   async getWeatherStations(countryId: string): Promise<WeatherStation[]> {
-    return this.request<WeatherStation[]>(`/api/Geographic/${countryId}/WeatherStations/json`);
+    // Check cache first
+    if (stationsCache && Date.now() - stationsCache.fetchedAt < STATIONS_CACHE_TTL) {
+      console.log('[EDACaP] Using cached weather stations');
+      return stationsCache.stations;
+    }
+
+    const stations = await this.request<WeatherStation[]>(`/api/Geographic/${countryId}/WeatherStations/json`);
+    
+    // Cache the result
+    stationsCache = { stations, fetchedAt: Date.now() };
+    console.log(`[EDACaP] Cached ${stations.length} weather stations`);
+    
+    return stations;
   }
 
   /**
