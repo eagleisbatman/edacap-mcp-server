@@ -14,3 +14,6 @@ dist/
 *database-url*
 *connection-string*
 
+
+# Claude Code instructions (local only)
+CLAUDE.md
