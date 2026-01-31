@@ -58,9 +58,9 @@ app.get('/', (req, res) => {
       mcp: '/mcp (POST)'
     },
     tools: [
-      'get_weather_stations',
-      'get_climate_forecast',
-      'get_crop_forecast'
+      { name: 'weather.edacap.list_stations', alias: 'get_weather_stations' },
+      { name: 'weather.edacap.forecast_climate', alias: 'get_climate_forecast' },
+      { name: 'crop.edacap.forecast_yield', alias: 'get_crop_forecast' }
     ],
     supportedRegion: 'Ethiopia',
     apiDocumentation: 'https://docs.aclimate.org/en/latest/'
@@ -88,262 +88,289 @@ app.post('/mcp', async (req, res) => {
       version: '1.0.0'
     });
 
-    // Tool 1: Get weather stations
-    server.tool(
-      'get_weather_stations',
-      'Get list of weather stations in Ethiopia. Returns station names, IDs, and locations.',
-      {},
-      async () => {
-        try {
-          if (!cachedEthiopiaId) {
-            cachedEthiopiaId = await edacapClient.getEthiopiaId();
-          }
+    // ===========================================
+    // TOOL NAMING STANDARD: domain.provider.action
+    // Old names kept as aliases for backward compatibility
+    // ===========================================
 
-          if (!cachedEthiopiaId) {
-            return {
-              content: [{
-                type: 'text',
-                text: 'Ethiopia is not available in the EDACaP system at this time.'
-              }],
-              isError: true
-            };
-          }
+    // Tool 1: List weather stations
+    const listStationsHandler = async () => {
+      try {
+        if (!cachedEthiopiaId) {
+          cachedEthiopiaId = await edacapClient.getEthiopiaId();
+        }
 
-          const stations = await edacapClient.getWeatherStations(cachedEthiopiaId);
-
+        if (!cachedEthiopiaId) {
           return {
             content: [{
-              type: 'text',
-              text: JSON.stringify({
-                country: 'Ethiopia',
-                total_stations: stations.length,
-                stations: stations.map(s => ({
-                  id: s.id,
-                  name: s.name,
-                  latitude: s.latitude,
-                  longitude: s.longitude,
-                  municipality: s.municipality?.name,
-                  state: s.municipality?.state?.name
-                }))
-              }, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          console.error('[MCP Tool] Error:', error);
-          return {
-            content: [{
-              type: 'text',
-              text: `Error fetching weather stations: ${error.message}`
+              type: 'text' as const,
+              text: 'Ethiopia is not available in the EDACaP system at this time.'
             }],
             isError: true
           };
         }
+
+        const stations = await edacapClient.getWeatherStations(cachedEthiopiaId);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              country: 'Ethiopia',
+              total_stations: stations.length,
+              stations: stations.map(s => ({
+                id: s.id,
+                name: s.name,
+                latitude: s.latitude,
+                longitude: s.longitude,
+                municipality: s.municipality?.name,
+                state: s.municipality?.state?.name
+              }))
+            }, null, 2)
+          }]
+        };
+      } catch (error: unknown) {
+        console.error('[MCP Tool] Error:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error fetching weather stations: ${message}`
+          }],
+          isError: true
+        };
       }
-    );
+    };
+
+    const listStationsDescription = `List weather stations in Ethiopia from EDACaP.
+TRIGGERS: "weather stations", "stations list", "EDACaP stations"
+RETURNS: station names, IDs, coordinates, municipality info.
+COVERAGE: Ethiopia only - Returns all registered weather stations.`;
+
+    // Register with NEW standardized name
+    server.tool('weather.edacap.list_stations', listStationsDescription, {}, listStationsHandler);
+    // Register ALIAS for backward compatibility
+    server.tool('get_weather_stations', listStationsDescription, {}, listStationsHandler);
 
     // Tool 2: Get climate forecast
-    server.tool(
-      'get_climate_forecast',
-      'Get seasonal climate forecast for a location in Ethiopia. Returns rainfall, temperature predictions.',
-      {
-        latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
-        longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
-        station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
-      },
-      async ({ latitude, longitude, station_id }) => {
-        try {
-          const lat = latitude ?? defaultLatitude;
-          const lon = longitude ?? defaultLongitude;
+    const climateForecastHandler = async ({ latitude, longitude, station_id }: { latitude?: number; longitude?: number; station_id?: string }) => {
+      try {
+        const lat = latitude ?? defaultLatitude;
+        const lon = longitude ?? defaultLongitude;
 
-          if (!cachedEthiopiaId) {
-            cachedEthiopiaId = await edacapClient.getEthiopiaId();
-          }
+        if (!cachedEthiopiaId) {
+          cachedEthiopiaId = await edacapClient.getEthiopiaId();
+        }
 
-          if (!cachedEthiopiaId) {
-            return {
-              content: [{
-                type: 'text',
-                text: 'Ethiopia is not available in the EDACaP system at this time.'
-              }],
-              isError: true
-            };
-          }
+        if (!cachedEthiopiaId) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: 'Ethiopia is not available in the EDACaP system at this time.'
+            }],
+            isError: true
+          };
+        }
 
-          let stationId = station_id;
-          let response;
+        let stationId = station_id;
+        let response;
 
-          // If station ID provided, use it directly
-          if (stationId) {
-            console.log(`[MCP Tool] Using provided station ID: ${stationId}`);
-            response = await edacapClient.getClimateForecast(stationId);
-          }
-          // Otherwise, find an active station near the coordinates
-          else if (lat !== undefined && lon !== undefined) {
-            // Try to find a station with actual data (tries up to 3 nearby stations)
-            const activeResult = await edacapClient.findActiveStation(lat, lon, cachedEthiopiaId, 3);
-            
-            if (activeResult) {
-              stationId = activeResult.station.id;
-              response = activeResult.forecast;
-              console.log(`[MCP Tool] Found active station: ${activeResult.station.name} (${stationId})`);
-            } else {
-              // No active station found - return helpful message
-              return {
-                content: [{
-                  type: 'text',
-                  text: JSON.stringify({
-                    message: 'No seasonal climate forecast data is currently available for your location. The EDACaP system does not have active weather stations with forecast data near your coordinates. For current weather, please use Tomorrow.io or AccuWeather instead.',
-                    coordinates: { latitude: lat, longitude: lon },
-                    suggestion: 'Try asking for current weather or weekly forecast instead'
-                  }, null, 2)
-                }]
-              };
-            }
+        // If station ID provided, use it directly
+        if (stationId) {
+          console.log(`[MCP Tool] Using provided station ID: ${stationId}`);
+          response = await edacapClient.getClimateForecast(stationId);
+        }
+        // Otherwise, find an active station near the coordinates
+        else if (lat !== undefined && lon !== undefined) {
+          // Try to find a station with actual data (tries up to 3 nearby stations)
+          const activeResult = await edacapClient.findActiveStation(lat, lon, cachedEthiopiaId, 3);
+
+          if (activeResult) {
+            stationId = activeResult.station.id;
+            response = activeResult.forecast;
+            console.log(`[MCP Tool] Found active station: ${activeResult.station.name} (${stationId})`);
           } else {
+            // No active station found - return helpful message
             return {
               content: [{
-                type: 'text',
-                text: 'Please provide coordinates or a station ID to get climate forecasts.'
-              }],
-              isError: true
-            };
-          }
-
-          // Handle case where climate array is empty or missing (shouldn't happen with findActiveStation, but just in case)
-          if (!response || !response.climate || response.climate.length === 0) {
-            return {
-              content: [{
-                type: 'text',
+                type: 'text' as const,
                 text: JSON.stringify({
-                  station_id: stationId,
-                  message: 'No climate forecast data available for this station at this time.',
-                  forecast_id: response?.forecast,
-                  confidence: response?.confidence
+                  message: 'No seasonal climate forecast data is currently available for your location. The EDACaP system does not have active weather stations with forecast data near your coordinates. For current weather, please use Tomorrow.io or AccuWeather instead.',
+                  coordinates: { latitude: lat, longitude: lon },
+                  suggestion: 'Try asking for current weather or weekly forecast instead'
                 }, null, 2)
               }]
             };
           }
-
-          // Process climate data from the response
-          const climateData = response.climate.map(c => ({
-            weather_station: c.weather_station,
-            forecasts: c.data.map(d => ({
-              year: d.year,
-              month: d.month,
-              probabilities: d.probabilities.map(p => ({
-                measure: p.measure,
-                below_normal: p.lower,
-                normal: p.normal,
-                above_normal: p.upper
-              }))
-            })),
-            performance: c.performance
-          }));
-
+        } else {
           return {
             content: [{
-              type: 'text',
-              text: JSON.stringify({
-                station_id: stationId,
-                forecast_id: response.forecast,
-                confidence: response.confidence,
-                climate_forecasts: climateData
-              }, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          console.error('[MCP Tool] Error:', error);
-          return {
-            content: [{
-              type: 'text',
-              text: `Error fetching climate forecast: ${error.message}`
+              type: 'text' as const,
+              text: 'Please provide coordinates or a station ID to get climate forecasts.'
             }],
             isError: true
           };
         }
+
+        // Handle case where climate array is empty or missing (shouldn't happen with findActiveStation, but just in case)
+        if (!response || !response.climate || response.climate.length === 0) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                station_id: stationId,
+                message: 'No climate forecast data available for this station at this time.',
+                forecast_id: response?.forecast,
+                confidence: response?.confidence
+              }, null, 2)
+            }]
+          };
+        }
+
+        // Process climate data from the response
+        const climateData = response.climate.map(c => ({
+          weather_station: c.weather_station,
+          forecasts: c.data.map(d => ({
+            year: d.year,
+            month: d.month,
+            probabilities: d.probabilities.map(p => ({
+              measure: p.measure,
+              below_normal: p.lower,
+              normal: p.normal,
+              above_normal: p.upper
+            }))
+          })),
+          performance: c.performance
+        }));
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              station_id: stationId,
+              forecast_id: response.forecast,
+              confidence: response.confidence,
+              climate_forecasts: climateData
+            }, null, 2)
+          }]
+        };
+      } catch (error: unknown) {
+        console.error('[MCP Tool] Error:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error fetching climate forecast: ${message}`
+          }],
+          isError: true
+        };
       }
-    );
+    };
+
+    const climateForecastSchema = {
+      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
+      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
+      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
+    };
+
+    const climateForecastDescription = `Get seasonal climate forecast for Ethiopia from EDACaP.
+TRIGGERS: "seasonal forecast", "climate prediction", "rainfall forecast", "EDACaP forecast"
+RETURNS: rainfall and temperature probability forecasts for upcoming months.
+COVERAGE: Ethiopia only - Requires coordinates or station ID.`;
+
+    // Register with NEW standardized name
+    server.tool('weather.edacap.forecast_climate', climateForecastDescription, climateForecastSchema, climateForecastHandler);
+    // Register ALIAS for backward compatibility
+    server.tool('get_climate_forecast', climateForecastDescription, climateForecastSchema, climateForecastHandler);
 
     // Tool 3: Get crop/agronomic forecast
-    server.tool(
-      'get_crop_forecast',
-      'Get crop yield forecast for a location in Ethiopia. Returns expected yield predictions for available crops.',
-      {
-        latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
-        longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
-        station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
-      },
-      async ({ latitude, longitude, station_id }) => {
-        try {
-          const lat = latitude ?? defaultLatitude;
-          const lon = longitude ?? defaultLongitude;
+    const cropForecastHandler = async ({ latitude, longitude, station_id }: { latitude?: number; longitude?: number; station_id?: string }) => {
+      try {
+        const lat = latitude ?? defaultLatitude;
+        const lon = longitude ?? defaultLongitude;
 
-          if (!cachedEthiopiaId) {
-            cachedEthiopiaId = await edacapClient.getEthiopiaId();
-          }
+        if (!cachedEthiopiaId) {
+          cachedEthiopiaId = await edacapClient.getEthiopiaId();
+        }
 
-          if (!cachedEthiopiaId) {
-            return {
-              content: [{
-                type: 'text',
-                text: 'Ethiopia is not available in the EDACaP system at this time.'
-              }],
-              isError: true
-            };
-          }
-
-          let stationId = station_id;
-
-          if (!stationId && lat !== undefined && lon !== undefined) {
-            const nearestStation = await edacapClient.findNearestStation(lat, lon, cachedEthiopiaId);
-            if (nearestStation) {
-              stationId = nearestStation.id;
-            }
-          }
-
-          if (!stationId) {
-            return {
-              content: [{
-                type: 'text',
-                text: 'Please provide coordinates or a station ID to get crop forecasts.'
-              }],
-              isError: true
-            };
-          }
-
-          const forecasts = await edacapClient.getAgronomicForecast(stationId);
-
+        if (!cachedEthiopiaId) {
           return {
             content: [{
-              type: 'text',
-              text: JSON.stringify({
-                station_id: stationId,
-                crop_forecasts: forecasts.map(f => ({
-                  cultivar: f.cultivar,
-                  soil: f.soil,
-                  predictions: f.data.map(d => ({
-                    measure: d.measure,
-                    median: d.median,
-                    average: d.avg,
-                    range: { min: d.min, max: d.max },
-                    confidence: { lower: d.conf_lower, upper: d.conf_upper }
-                  }))
-                }))
-              }, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          console.error('[MCP Tool] Error:', error);
-          return {
-            content: [{
-              type: 'text',
-              text: `Error fetching crop forecast: ${error.message}`
+              type: 'text' as const,
+              text: 'Ethiopia is not available in the EDACaP system at this time.'
             }],
             isError: true
           };
         }
+
+        let stationId = station_id;
+
+        if (!stationId && lat !== undefined && lon !== undefined) {
+          const nearestStation = await edacapClient.findNearestStation(lat, lon, cachedEthiopiaId);
+          if (nearestStation) {
+            stationId = nearestStation.id;
+          }
+        }
+
+        if (!stationId) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: 'Please provide coordinates or a station ID to get crop forecasts.'
+            }],
+            isError: true
+          };
+        }
+
+        const forecasts = await edacapClient.getAgronomicForecast(stationId);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              station_id: stationId,
+              crop_forecasts: forecasts.map(f => ({
+                cultivar: f.cultivar,
+                soil: f.soil,
+                predictions: f.data.map(d => ({
+                  measure: d.measure,
+                  median: d.median,
+                  average: d.avg,
+                  range: { min: d.min, max: d.max },
+                  confidence: { lower: d.conf_lower, upper: d.conf_upper }
+                }))
+              }))
+            }, null, 2)
+          }]
+        };
+      } catch (error: unknown) {
+        console.error('[MCP Tool] Error:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error fetching crop forecast: ${message}`
+          }],
+          isError: true
+        };
       }
-    );
+    };
+
+    const cropForecastSchema = {
+      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
+      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
+      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
+    };
+
+    const cropForecastDescription = `Get crop yield forecast for Ethiopia from EDACaP.
+TRIGGERS: "crop yield", "yield prediction", "harvest forecast", "agronomic forecast"
+RETURNS: yield predictions with confidence intervals for available crops.
+COVERAGE: Ethiopia only - Requires coordinates or station ID.`;
+
+    // Register with NEW standardized name
+    server.tool('crop.edacap.forecast_yield', cropForecastDescription, cropForecastSchema, cropForecastHandler);
+    // Register ALIAS for backward compatibility
+    server.tool('get_crop_forecast', cropForecastDescription, cropForecastSchema, cropForecastHandler);
 
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
@@ -374,8 +401,10 @@ const server = app.listen(Number(PORT), HOST, () => {
   console.log(`🌦️  MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`🌍 Region: Ethiopia`);
   console.log(`📚 Docs: https://docs.aclimate.org/en/latest/`);
-  console.log('=========================================');
-  console.log('Tools: get_weather_stations, get_climate_forecast, get_crop_forecast');
+  console.log('🛠️  Tools: 3 (with backward-compatible aliases)');
+  console.log('   - weather.edacap.list_stations (alias: get_weather_stations)');
+  console.log('   - weather.edacap.forecast_climate (alias: get_climate_forecast)');
+  console.log('   - crop.edacap.forecast_yield (alias: get_crop_forecast)');
   console.log('=========================================');
   console.log('');
 });
