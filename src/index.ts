@@ -90,11 +90,14 @@ app.post('/mcp', async (req, res) => {
 
     // ===========================================
     // TOOL NAMING STANDARD: domain.provider.action
-    // Old names kept as aliases for backward compatibility
     // ===========================================
 
     // Tool 1: List weather stations
-    const listStationsHandler = async () => {
+    const ListStationsInputSchema = z.object({}).strict();
+
+    type ListStationsInput = z.infer<typeof ListStationsInputSchema>;
+
+    const listStationsHandler = async (_input: ListStationsInput) => {
       try {
         if (!cachedEthiopiaId) {
           cachedEthiopiaId = await edacapClient.getEthiopiaId();
@@ -147,13 +150,35 @@ TRIGGERS: "weather stations", "stations list", "EDACaP stations"
 RETURNS: station names, IDs, coordinates, municipality info.
 COVERAGE: Ethiopia only - Returns all registered weather stations.`;
 
+    const listStationsAnnotations = {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    };
+
     // Register with NEW standardized name
-    server.tool('weather.edacap.list_stations', listStationsDescription, {}, listStationsHandler);
-    // Register ALIAS for backward compatibility
-    server.tool('get_weather_stations', listStationsDescription, {}, listStationsHandler);
+    server.registerTool(
+      'weather.edacap.list_stations',
+      {
+        title: 'EDACaP Weather Stations List',
+        description: listStationsDescription,
+        inputSchema: ListStationsInputSchema,
+        annotations: listStationsAnnotations
+      },
+      listStationsHandler
+    );
 
     // Tool 2: Get climate forecast
-    const climateForecastHandler = async ({ latitude, longitude, station_id }: { latitude?: number; longitude?: number; station_id?: string }) => {
+    const ClimateForecastInputSchema = z.object({
+      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
+      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
+      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
+    }).strict();
+
+    type ClimateForecastInput = z.infer<typeof ClimateForecastInputSchema>;
+
+    const climateForecastHandler = async ({ latitude, longitude, station_id }: ClimateForecastInput) => {
       try {
         const lat = latitude ?? defaultLatitude;
         const lon = longitude ?? defaultLongitude;
@@ -267,24 +292,40 @@ COVERAGE: Ethiopia only - Returns all registered weather stations.`;
       }
     };
 
-    const climateForecastSchema = {
-      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
-      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
-      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
-    };
-
     const climateForecastDescription = `Get seasonal climate forecast for Ethiopia from EDACaP.
 TRIGGERS: "seasonal forecast", "climate prediction", "rainfall forecast", "EDACaP forecast"
 RETURNS: rainfall and temperature probability forecasts for upcoming months.
 COVERAGE: Ethiopia only - Requires coordinates or station ID.`;
 
+    const climateForecastAnnotations = {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    };
+
     // Register with NEW standardized name
-    server.tool('weather.edacap.forecast_climate', climateForecastDescription, climateForecastSchema, climateForecastHandler);
-    // Register ALIAS for backward compatibility
-    server.tool('get_climate_forecast', climateForecastDescription, climateForecastSchema, climateForecastHandler);
+    server.registerTool(
+      'weather.edacap.forecast_climate',
+      {
+        title: 'EDACaP Climate Forecast',
+        description: climateForecastDescription,
+        inputSchema: ClimateForecastInputSchema,
+        annotations: climateForecastAnnotations
+      },
+      climateForecastHandler
+    );
 
     // Tool 3: Get crop/agronomic forecast
-    const cropForecastHandler = async ({ latitude, longitude, station_id }: { latitude?: number; longitude?: number; station_id?: string }) => {
+    const CropForecastInputSchema = z.object({
+      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
+      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
+      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
+    }).strict();
+
+    type CropForecastInput = z.infer<typeof CropForecastInputSchema>;
+
+    const cropForecastHandler = async ({ latitude, longitude, station_id }: CropForecastInput) => {
       try {
         const lat = latitude ?? defaultLatitude;
         const lon = longitude ?? defaultLongitude;
@@ -356,21 +397,29 @@ COVERAGE: Ethiopia only - Requires coordinates or station ID.`;
       }
     };
 
-    const cropForecastSchema = {
-      latitude: z.number().min(-90).max(90).optional().describe('Latitude coordinate'),
-      longitude: z.number().min(-180).max(180).optional().describe('Longitude coordinate'),
-      station_id: z.string().optional().describe('Weather station ID (alternative to coordinates)')
-    };
-
     const cropForecastDescription = `Get crop yield forecast for Ethiopia from EDACaP.
 TRIGGERS: "crop yield", "yield prediction", "harvest forecast", "agronomic forecast"
 RETURNS: yield predictions with confidence intervals for available crops.
 COVERAGE: Ethiopia only - Requires coordinates or station ID.`;
 
+    const cropForecastAnnotations = {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    };
+
     // Register with NEW standardized name
-    server.tool('crop.edacap.forecast_yield', cropForecastDescription, cropForecastSchema, cropForecastHandler);
-    // Register ALIAS for backward compatibility
-    server.tool('get_crop_forecast', cropForecastDescription, cropForecastSchema, cropForecastHandler);
+    server.registerTool(
+      'crop.edacap.forecast_yield',
+      {
+        title: 'EDACaP Crop Yield Forecast',
+        description: cropForecastDescription,
+        inputSchema: CropForecastInputSchema,
+        annotations: cropForecastAnnotations
+      },
+      cropForecastHandler
+    );
 
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
@@ -401,10 +450,10 @@ const server = app.listen(Number(PORT), HOST, () => {
   console.log(`🌦️  MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`🌍 Region: Ethiopia`);
   console.log(`📚 Docs: https://docs.aclimate.org/en/latest/`);
-  console.log('🛠️  Tools: 3 (with backward-compatible aliases)');
-  console.log('   - weather.edacap.list_stations (alias: get_weather_stations)');
-  console.log('   - weather.edacap.forecast_climate (alias: get_climate_forecast)');
-  console.log('   - crop.edacap.forecast_yield (alias: get_crop_forecast)');
+  console.log('🛠️  Tools: 3');
+  console.log('   - weather.edacap.list_stations');
+  console.log('   - weather.edacap.forecast_climate');
+  console.log('   - crop.edacap.forecast_yield');
   console.log('=========================================');
   console.log('');
 });
