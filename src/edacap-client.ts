@@ -167,7 +167,8 @@ export class EDACaPClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`EDACaP API error (${response.status}): ${errorText || response.statusText}`);
+        console.error(`[EDACaP] API error (${response.status}):`, errorText);
+        throw new Error(`EDACaP API error (${response.status})`);
       }
 
       return await response.json() as T;
